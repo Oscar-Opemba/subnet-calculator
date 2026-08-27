@@ -1,6 +1,9 @@
+import hmac
 import html
 import json
+import secrets
 import socket
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
@@ -9,10 +12,15 @@ MAX_BODY = 1_000_000
 MAX_FIELDS = 32
 MAX_HEADERS = 64
 MAX_HEADER_VALUE = 8_192
+MAX_OUTPUT_CHARS = 512_000
+MAX_CONCURRENT_REQUESTS = 16
 REQUEST_TIMEOUT = 10
 RATE_WINDOW = 60.0
 RATE_LIMIT = 30
 _rate_buckets = {}
+_rate_lock = threading.Lock()
+_request_slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
+_FORM_TOKEN = secrets.token_urlsafe(32)
 
 
 def esc(value):
@@ -20,7 +28,10 @@ def esc(value):
 
 
 def render_json(data):
-    return '<pre class="result">' + esc(json.dumps(data, indent=2, sort_keys=True, default=str)) + '</pre>'
+    serialized = json.dumps(data, indent=2, sort_keys=True, default=str)
+    if len(serialized) > MAX_OUTPUT_CHARS:
+        serialized = json.dumps({'error': 'analysis output exceeded the display safety limit', 'output_truncated': True, 'preview': serialized[:MAX_OUTPUT_CHARS // 4]})
+    return '<pre class="result">' + esc(serialized) + '</pre>'
 
 
 def page(title, fields, result=''):
@@ -39,21 +50,22 @@ main{{background:#111827;border:1px solid #334155;border-radius:16px;padding:1.5
 label{{display:block;margin:1rem 0;color:#cbd5e1}}input,textarea{{display:block;width:100%;box-sizing:border-box;margin-top:.45rem;padding:.75rem;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#f8fafc;font:inherit}}textarea{{min-height:180px}}
 button{{padding:.75rem 1.2rem;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}}small{{color:#94a3b8}}.result{{white-space:pre-wrap;overflow:auto;background:#020617;padding:1rem;border-radius:10px;border:1px solid #334155}}
 </style></head><body><main><h1>{esc(title)}</h1><p><small>Local defensive utility. Network checks are single-request, no-redirect, and intended for systems you own or are authorized to assess. Sensitive offline inputs are not stored.</small></p>
-<form method="post" accept-charset="UTF-8">{''.join(controls)}<button type="submit">Analyze</button></form>{result}</main></body></html>'''
+<form method="post" accept-charset="UTF-8"><input type="hidden" name="_csrf" value="{esc(_FORM_TOKEN)}">{''.join(controls)}<button type="submit">Analyze</button></form>{result}</main></body></html>'''
 
 
 def _allowed(client):
-    now = time.monotonic()
-    bucket = _rate_buckets.setdefault(client, [])
-    bucket[:] = [stamp for stamp in bucket if now - stamp < RATE_WINDOW]
-    if len(bucket) >= RATE_LIMIT:
-        return False
-    bucket.append(now)
-    if len(_rate_buckets) > 256:
-        non_empty = [(key, values[-1]) for key, values in _rate_buckets.items() if values]
-        for key, _ in sorted(non_empty, key=lambda item: item[1])[:64]:
-            _rate_buckets.pop(key, None)
-    return True
+    with _rate_lock:
+        now = time.monotonic()
+        bucket = _rate_buckets.setdefault(client, [])
+        bucket[:] = [stamp for stamp in bucket if now - stamp < RATE_WINDOW]
+        if len(bucket) >= RATE_LIMIT:
+            return False
+        bucket.append(now)
+        if len(_rate_buckets) > 256:
+            non_empty = [(key, values[-1]) for key, values in _rate_buckets.items() if values]
+            for key, _ in sorted(non_empty, key=lambda item: item[1])[:64]:
+                _rate_buckets.pop(key, None)
+        return True
 
 
 def _valid_request_headers(headers):
@@ -76,6 +88,14 @@ def serve(title, fields, analyze, port):
 
         def log_message(self, format, *args):
             return
+
+        def finish(self):
+            try:
+                super().finish()
+            finally:
+                if getattr(self, '_slot_acquired', False):
+                    _request_slots.release()
+                    self._slot_acquired = False
 
         def _send(self, body, status=200, extra_headers=None):
             encoded = body.encode('utf-8')
@@ -110,6 +130,10 @@ def serve(title, fields, analyze, port):
             if not _valid_request_headers(self.headers):
                 self._send('<h1>Request headers exceed the safety limits</h1>', 431)
                 return False
+            if not _request_slots.acquire(blocking=False):
+                self._send('<h1>Server is busy; try again later</h1>', 503, {'Retry-After': '5'})
+                return False
+            self._slot_acquired = True
             return True
 
         def do_GET(self):
@@ -137,6 +161,10 @@ def serve(title, fields, analyze, port):
             except (TimeoutError, ValueError):
                 self._send('<h1>Invalid form data</h1>', 400)
                 return
+            csrf = values.pop('_csrf', '')
+            if not hmac.compare_digest(csrf, _FORM_TOKEN):
+                self._send('<h1>Invalid form token</h1>', 403)
+                return
             try:
                 result = analyze(values)
             except Exception:
@@ -151,6 +179,8 @@ def serve(title, fields, analyze, port):
         do_DELETE = _method_not_allowed
         do_OPTIONS = _method_not_allowed
         do_HEAD = _method_not_allowed
+        do_TRACE = _method_not_allowed
+        do_CONNECT = _method_not_allowed
 
     class Server(ThreadingHTTPServer):
         address_family = socket.AF_INET
