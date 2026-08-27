@@ -1,0 +1,11 @@
+name: Feature request
+description: Suggest a safe defensive improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed improvement
+      description: Explain the defensive use case and how it preserves bounded, authorized behavior.
+    validations:
+      required: true

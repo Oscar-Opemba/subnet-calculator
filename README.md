@@ -31,3 +31,7 @@ MIT. See [LICENSE](LICENSE).
 ## Context
 
 The checks are aligned with defensive categories in the [OWASP Web Security Testing Guide](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/) and, for TLS-oriented review, the type of configuration analysis described by [Qualys SSL Labs](https://www.ssllabs.com/ssltest/).
+
+## Hardening
+
+See [HARDENING.md](HARDENING.md) for the threat model and safeguards in this release. The local server is loopback-only, rate-limited, bounded, and does not follow redirects.
