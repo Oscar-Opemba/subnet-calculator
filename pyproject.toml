@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subnet-calculator"
+version = "0.3.0"
+description = "Calculate CIDR details locally with bounded host enumeration."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Oscar Opemba" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+]
+
+[project.urls]
+Repository = "https://github.com/Oscar-Opemba/subnet-calculator"
+Issues = "https://github.com/Oscar-Opemba/subnet-calculator/issues"
+
+[project.scripts]
+subnet-calculator = "app:main"
+
+[tool.setuptools]
+py-modules = ["app", "common", "security_utils"]

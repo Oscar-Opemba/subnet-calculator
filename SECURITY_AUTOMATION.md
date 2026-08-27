@@ -22,6 +22,10 @@ The `OpenSSF Scorecard` workflow runs on pushes to `main`, every Monday, branch-
 
 Third-party and GitHub-maintained Actions are pinned to full commit SHAs rather than mutable tags. Workflows use least-privilege permissions, bounded job timeouts, concurrency cancellation, and `persist-credentials: false` where checkout is used for Scorecard analysis.
 
+## CI quality gate
+
+The tool CI matrix runs on Python 3.11, 3.12, and 3.13. It compiles the source, runs the unit and abuse-case suites, builds a wheel without runtime dependencies, and performs an offline install smoke test. The documentation-only hub uses a manifest-appropriate test workflow.
+
 ## Maintainer response
 
 Review CodeQL, Dependency Review, Scorecard, and Dependabot findings before merging. Do not paste secrets, live target information, or proprietary logs into issues or pull requests. Preserve the project’s defensive and authorized-use boundary.

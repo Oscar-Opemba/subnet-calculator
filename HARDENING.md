@@ -6,7 +6,7 @@ This release adds a second hardening layer on top of the original defensive boun
 
 | Control | Implementation |
 | --- | --- |
-| Loopback server boundary | The interactive server binds to IPv4 loopback only, rejects non-loopback peers, accepts only GET and POST, closes connections, and returns a strict `Allow` header for unsupported methods. |
+| Loopback server boundary | The interactive server binds to IPv4 loopback only, rejects non-loopback peers, accepts only GET and POST, enforces an allowlisted local Host header, closes connections, and returns a strict `Allow` header for unsupported methods. |
 | Request limits | Port validation, 1 MB body cap, 32 form-field cap, 64-header cap, 8 KB header-value cap, 10-second socket timeout, and 30 requests per client per minute. |
 | Browser isolation | `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Cross-Origin-Resource-Policy`, `Permissions-Policy`, `Referrer-Policy`, and no-store cache headers. |
 | Browser request integrity | Forms carry a per-process CSRF token and POST requests verify it with constant-time comparison before analysis. |
